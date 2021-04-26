@@ -9,5 +9,5 @@
 
 - 1일 **1commit** 꼭 하기.   
 
-- commit template 준수하기. (방법)   
+- commit template 준수하기. <a href="https://github.com/bcaitech1/p3-ims-obd-p3-seg-7/wiki/commit-template-%EC%A0%81%EC%9A%A9">(commit template 적용 방법)</a>  
 
