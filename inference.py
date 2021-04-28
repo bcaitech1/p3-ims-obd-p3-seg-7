@@ -14,7 +14,7 @@ from utils import get_category_names
 from load_data import CustomDataLoader
 
 
-def inference(model_name, batch_size, num_workers):
+def inference(model_name, batch_size, num_workers, type):
     # define model
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
@@ -26,8 +26,7 @@ def inference(model_name, batch_size, num_workers):
     test_path = dataset_path + '/test.json'
 
     # best model 저장된 경로
-    model_path = './results/FCN8s2/fcn8s_best_model(pretrained).pt'
-    model_path = os.path.join('./results', model_name, model_name + '.pt')
+    model_path = os.path.join('./results', f"{model_name}", f"{model_name}_best_{type}.pt")
     anns_file_path = dataset_path + '/' + 'train.json'
 
     # Read annotations
@@ -43,7 +42,11 @@ def inference(model_name, batch_size, num_workers):
     def collate_fn(batch):
         return tuple(zip(*batch))
 
+    transform_module = getattr(import_module("augmentation"), args.augmentation)  # default: BaseAugmentation
+    test_transform = transform_module()
+
     test_transform = A.Compose([
+                        A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
                         ToTensorV2()
                         ])
 
@@ -52,7 +55,8 @@ def inference(model_name, batch_size, num_workers):
     test_loader = torch.utils.data.DataLoader(dataset=test_dataset,
                                             batch_size=batch_size,
                                             num_workers=num_workers,
-                                            collate_fn=collate_fn)
+                                            collate_fn=collate_fn
+                                            )
 
     size = 256
     transform = A.Compose([A.Resize(256, 256)])
@@ -94,11 +98,11 @@ def inference(model_name, batch_size, num_workers):
                                     ignore_index=True)
 
     # submission.csv로 저장
-    submission.to_csv(f"./submission/{model_name}.csv", index=False)
+    submission.to_csv(f"./submission/{model_name}_{type}.csv", index=False)
 
 
 def main(args):
-    inference(args.model, args.batch_size, args.num_workers)
+    inference(args.model, args.batch_size, args.num_workers, args.type)
 
 
 if __name__ == '__main__':
@@ -106,8 +110,10 @@ if __name__ == '__main__':
   
     # model dir
     # FCN8s / DeconvNet / SegNet / Deeplab_V3_Resnet101
-    parser.add_argument('--model', type=str, default="SegNet")
-    parser.add_argument('--batch_size', type=int, default=16, help='input batch size for training (deafult: 16)')
+    parser.add_argument('--model', type=str, default="Deeplab_V3_Resnet101")
+    parser.add_argument('--augmentation', type=str, default='ImagenetDefaultAugmentation', help='augmentation method for training')
+    parser.add_argument('--type', type=str, default='loss')
+    parser.add_argument('--batch_size', type=int, default=8, help='input batch size for training (deafult: 8)')
     parser.add_argument('--num_workers', type=int, default=4, help='number of workers for dataloader (default: 4)')
     args = parser.parse_args()
     main(args)
