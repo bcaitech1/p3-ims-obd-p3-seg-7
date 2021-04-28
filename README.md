@@ -18,3 +18,12 @@
 <br>
 
 - ### 각자 브랜치를 파서 진행하고, 다른 브랜치 참고 및 활용. 
+
+
+<br>
+
+-----
+
+<br>
+
+## <a href="https://github.com/bcaitech1/p3-ims-obd-p3-seg-7/blob/jiyun/jiyun.md">jiyun</a>
