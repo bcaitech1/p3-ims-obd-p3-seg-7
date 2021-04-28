@@ -1,7 +1,10 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torchvision import models
 from torchvision.models import vgg16
+
+import segmentation_models_pytorch as smp
 
 
 class FCN8s(nn.Module):
@@ -147,7 +150,7 @@ class DeconvNet(nn.Module):
         self.drop7 = nn.Dropout2d(0.5)
 
         # 7 x 7 fc6-deconv
-        self.fc6_deconv = self.DCB(4096, 512, 7, 1, 0)
+        self.fc6_deconv = DCB(4096, 512, 7, 1, 0)
 
         # 14 x 14 unpool5
         self.unpool5 = nn.MaxUnpool2d(2, stride=2)
@@ -368,40 +371,48 @@ def conv_relu(in_ch, out_ch, size=3, rate=1):
 class VGG16(nn.Module):
     def __init__(self):
         super(VGG16, self).__init__()
-
-        self.pretrained_model = vgg16(pretrained = True)
-
-        features, classifiers = list(self.pretrained_model.features.children()), list(self.pretrained_model.classifier.children())
-
-        self.features_map1 = nn.Sequential(*features[0:5])
-        self.features_map2 = nn.Sequential(*features[5:10])
-        self.features_map3 = nn.Sequential(*features[10:17])
-        self.features_map4 = nn.Sequential(*features[17:24])
-        self.features_map5 = nn.Sequential(*features[24:30],
-                                           nn.MaxPool2d(),
-                                           nn.AvgPool2d(3, stride=1, padding=1))
+        self.features1 = nn.Sequential(conv_relu(3, 64, 3, 1),
+                                      conv_relu(64, 64, 3, 1),
+                                      nn.MaxPool2d(3, stride=2, padding=1))
+        self.features2 = nn.Sequential(conv_relu(64, 128, 3, 1),
+                                      conv_relu(128, 128, 3, 1),
+                                      nn.MaxPool2d(3, stride=2, padding=1))
+        self.features3 = nn.Sequential(conv_relu(128, 256, 3, 1),
+                                      conv_relu(256, 256, 3, 1),
+                                      conv_relu(256, 256, 3, 1),
+                                      nn.MaxPool2d(3, stride=2, padding=1))
+        self.features4 = nn.Sequential(conv_relu(256, 512, 3, 1),
+                                      conv_relu(512, 512, 3, 1),
+                                      conv_relu(512, 512, 3, 1),
+                                      nn.MaxPool2d(3, stride=1, padding=1))
+                                      # and replace subsequent conv layer r=2
+        self.features5 = nn.Sequential(conv_relu(512, 512, 3, rate=2),
+                                      conv_relu(512, 512, 3, rate=2),
+                                      conv_relu(512, 512, 3, rate=2),
+                                      nn.MaxPool2d(3, stride=1, padding=1), 
+                                      nn.AvgPool2d(3, stride=1, padding=1)) # 마지막 stride=1로 해서 두 layer 크기 유지 
 
     def forward(self, x):
-        '''
-        [TODO]
-
-        '''
+        out = self.features1(x)
+        out = self.features2(out)
+        out = self.features3(out)
+        out = self.features4(out)
+        out = self.features5(out)
         return out
 
     
 class classifier(nn.Module):
     def __init__(self, num_classes): 
         super(classifier, self).__init__()
-        '''
-        [TODO]
-
-        ''' 
+        self.classifier = nn.Sequential(conv_relu(512, 1024, 3, rate=12), 
+                                       nn.Dropout2d(0.5), 
+                                       conv_relu(1024, 1024, 1, 1), 
+                                       nn.Dropout2d(0.5), 
+                                       nn.Conv2d(1024, num_classes, 1)
+                                       )
 
     def forward(self, x):
-        '''
-        [TODO]
-
-        '''
+        out = self.classifier(x)
         return out 
 
 
@@ -423,9 +434,65 @@ class DeepLabV1(nn.Module):
 
 class Deeplab_V3_Resnet101(nn.Module):
     def __init__(self, num_classes):
-        self.model = torch.hub.load('pytorch/vision:v0.9.0', 'deeplabv3_resnet101', pretrained=True)
+        super(Deeplab_V3_Resnet101, self).__init__()
+        self.model = torch.hub.load('pytorch/vision:v0.5.0', 'deeplabv3_resnet101', pretrained=True)
 
-        self.model.aux_classifier[4] = nn.Conv2d(256, num_classes, kernel_size=1, stride=1)
+        self.model.aux_classifier[-1] = nn.Conv2d(256, num_classes, kernel_size=1, stride=1)
+        self.model.classifier[-1] = nn.Conv2d(256, num_classes, kernel_size=1, stride=1)
+
+    def forward(self, x):
+        return self.model(x)['out']
+
+
+class deeplabv3_resnet50(nn.Module):
+    def __init__(self, num_classes):
+        super(deeplabv3_resnet50, self).__init__()
+        self.model = models.segmentation.deeplabv3_resnet50(pretrained=True)
+
+        self.model.aux_classifier[-1] = nn.Conv2d(256, num_classes, kernel_size=1, stride=1)
+        self.model.classifier[-1] = nn.Conv2d(256, num_classes, kernel_size=1, stride=1)
+
+    def forward(self, x):
+        return self.model(x)['out']
+
+
+class Unet_resnet50(nn.Module):
+    def __init__(self, num_classes):
+        super(Unet_resnet50, self).__init__()
+        self.model = smp.Unet(
+            encoder_name="resnet50",        # choose encoder, e.g. mobilenet_v2 or efficientnet-b7
+            encoder_weights="imagenet",     # use `imagenet` pre-trained weights for encoder initialization
+            in_channels=3,                  # model input channels (1 for gray-scale images, 3 for RGB, etc.)
+            classes=num_classes,                      # model output channels (number of classes in your dataset)
+        )
+
+    def forward(self, x):
+        return self.model(x)
+
+
+class DeepLabV3Plus_resnet101(nn.Module):
+    def __init__(self, num_classes):
+        super(DeepLabV3Plus_resnet101, self).__init__()
+        self.model = smp.DeepLabV3Plus(
+            encoder_name="resnet101",        # choose encoder, e.g. mobilenet_v2 or efficientnet-b7
+            encoder_weights="imagenet",     # use `imagenet` pre-trained weights for encoder initialization
+            in_channels=3,                  # model input channels (1 for gray-scale images, 3 for RGB, etc.)
+            classes=num_classes,                      # model output channels (number of classes in your dataset)
+        )
+
+    def forward(self, x):
+        return self.model(x)
+
+
+class DeepLabV3Plus_efficientnet(nn.Module):
+    def __init__(self, num_classes):
+        super(DeepLabV3Plus_efficientnet, self).__init__()
+        self.model = smp.DeepLabV3Plus(
+            encoder_name="efficientnet-b7",        # choose encoder, e.g. mobilenet_v2 or efficientnet-b7
+            encoder_weights="imagenet",     # use `imagenet` pre-trained weights for encoder initialization
+            in_channels=3,                  # model input channels (1 for gray-scale images, 3 for RGB, etc.)
+            classes=num_classes,                      # model output channels (number of classes in your dataset)
+        )
 
     def forward(self, x):
         return self.model(x)
