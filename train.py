@@ -5,6 +5,9 @@ import argparse
 import numpy as np
 from importlib import import_module
 import sys
+import time
+from datetime import datetime
+
 
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
@@ -41,7 +44,7 @@ def validation(epoch, model, data_loader, criterion, device):
         avrg_loss = total_loss / cnt
         print('Validation #{}  Average Loss: {:.4f}, mIoU: {:.4f}'.format(epoch, avrg_loss, np.mean(mIoU_list)))
 
-    return avrg_loss
+    return avrg_loss, np.mean(mIoU_list)
 
 
 def train(num_epochs, model, data_loader, val_loader, criterion, optimizer, saved_dir, val_every, device, model_name):
@@ -52,8 +55,10 @@ def train(num_epochs, model, data_loader, val_loader, criterion, optimizer, save
     # start training
     print('Start training..')
     best_loss = 9999999
+    best_mIoU = 0
     for epoch in range(num_epochs):
         model.train()
+        start_time = time.time()
         for step, (images, masks, _) in enumerate(data_loader):
             images = torch.stack(images)       # (batch, channel, height, width)
             masks = torch.stack(masks).long()  # (batch, channel, height, width)
@@ -72,20 +77,32 @@ def train(num_epochs, model, data_loader, val_loader, criterion, optimizer, save
             
             # step 주기에 따른 loss 출력
             if (step + 1) % 25 == 0:
-                print('Epoch [{}/{}], Step [{}/{}], Loss: {:.4f}'.format(
-                    epoch+1, num_epochs, step+1, len(data_loader), loss.item()))
+                time_taken = time.time() - start_time
+                print('Epoch [{}/{}], Step [{}/{}], Loss: {:.4f}, time taken: {:.4f}'.format(
+                    epoch+1, num_epochs, step+1, len(data_loader), loss.item(), time_taken))
+                start_time = time.time()
         
         # validation 주기에 따른 loss 출력 및 best model 저장
         if (epoch + 1) % val_every == 0:
-            avrg_loss = validation(epoch + 1, model, val_loader, criterion, device)
+            avrg_loss, mIoU = validation(epoch + 1, model, val_loader, criterion, device)
             if avrg_loss < best_loss:
-                print('Best performance at epoch: {}'.format(epoch + 1))
+                print('Best loss performance at epoch: {}'.format(epoch + 1))
                 print('Save model in', saved_dir)
                 best_loss = avrg_loss
 
                 # save best model
                 check_point = {'net': model.state_dict()}
-                output_path = os.path.join(saved_dir, model_name + '.pt')
+                output_path = os.path.join(saved_dir, f"{model_name}_best_loss.pt")
+                torch.save(model.state_dict(), output_path)
+
+            if mIoU > best_mIoU:
+                print('Best mIoU performance at epoch: {}'.format(epoch + 1))
+                print('Save model in', saved_dir)
+                best_mIoU = mIoU
+
+                # save best model
+                check_point = {'net': model.state_dict()}
+                output_path = os.path.join(saved_dir, f"{model_name}_best_mIoU.pt")
                 torch.save(model.state_dict(), output_path)
 
 
@@ -115,26 +132,27 @@ def main(args):
 
     category_names = get_category_names(dataset)
 
-    # train.json / validation.json / test.json
+    # train.json / validation.json
     train_path = dataset_path + '/train.json'
     val_path = dataset_path + '/val.json'
-    test_path = dataset_path + '/test.json'
 
     # collate_fn needs for batch
     def collate_fn(batch):
         return tuple(zip(*batch))
 
-    train_transform = A.Compose([
-                                ToTensorV2()
-                                ])
+    # set augmentation methods
+    transform_module = getattr(import_module("augmentation"), args.augmentation)  # default: BaseAugmentation
+    train_transform = transform_module()
+    val_transform = transform_module()
+    # train_transform = A.Compose([
+    #                             A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    #                             ToTensorV2(),
+    #                             ])
 
-    val_transform = A.Compose([
-                            ToTensorV2()
-                            ])
-
-    test_transform = A.Compose([
-                            ToTensorV2()
-                            ])
+    # val_transform = A.Compose([
+    #                         A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    #                         ToTensorV2(),
+    #                         ])
 
     # validation set을 직접 나누고 싶은 경우
     # random_split 사용하여 data set을 8:2 로 분할
@@ -150,27 +168,21 @@ def main(args):
     # validation dataset
     val_dataset = CustomDataLoader(dataset_path=dataset_path, data_dir=val_path, category_names=category_names, mode='val', transform=val_transform)
 
-    # test dataset
-    test_dataset = CustomDataLoader(dataset_path=dataset_path, data_dir=test_path, category_names=category_names, mode='test', transform=test_transform)
-
-
     # DataLoader
     train_loader = torch.utils.data.DataLoader(dataset=train_dataset, 
                                             batch_size=args.batch_size,
                                             shuffle=True,
                                             num_workers=args.num_workers,
-                                            collate_fn=collate_fn)
+                                            collate_fn=collate_fn,
+                                            drop_last=True
+                                            )
 
     val_loader = torch.utils.data.DataLoader(dataset=val_dataset, 
                                             batch_size=args.batch_size,
                                             shuffle=False,
                                             num_workers=args.num_workers,
-                                            collate_fn=collate_fn)
-
-    test_loader = torch.utils.data.DataLoader(dataset=test_dataset,
-                                            batch_size=args.batch_size,
-                                            num_workers=args.num_workers,
-                                            collate_fn=collate_fn)
+                                            collate_fn=collate_fn
+                                            )
 
     # define model
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -189,6 +201,12 @@ def main(args):
     # close sys logging
     del consoleLog
 
+    # print current time
+    now = datetime.now()
+
+    current_time = now.strftime("%H:%M:%S")
+    print("Current Time =", current_time)
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -196,17 +214,19 @@ if __name__ == '__main__':
     # Data and model checkpoints directories
     parser.add_argument('--seed', type=int, default=1024, help='random seed (default: 1024)')
     parser.add_argument('--epochs', type=int, default=20, help='number of epochs for train (deafult: 20)')
-    parser.add_argument('--batch_size', type=int, default=16, help='input batch size for training (deafult: 16)')
-    parser.add_argument('--num_workers', type=int, default=4, help='number of workers for dataloader (default: 4)')
+    parser.add_argument('--batch_size', type=int, default=8, help='input batch size for training (deafult: 8)')
+    parser.add_argument('--num_workers', type=int, default=4, help='number of workers for dataloader (default: 2)')
     parser.add_argument('--smoothing', type=float, default=0.2, help='label smoothing facotr for label smoothing loss (default: 0.2)')
 
-    parser.add_argument('--learning_rate', type=float, default=0.0001, help='learning rate for training (default: 0.0001)')
+    parser.add_argument('--learning_rate', type=float, default=1e-5, help='learning rate for training (default: 1e-6)')
     parser.add_argument('--weight_decay', type=float, default=1e-6, help='weight decay (default: 1e-6)')
 
     parser.add_argument('--model_dir', type=str, default='./results', help='directory where model would be saved (default: ./results)')
 
-    # FCN8s / DeconvNet / SegNet / Deeplab_V3_Resnet101
-    parser.add_argument('--model', type=str, default='SegNet', help='backbone bert model for training (default: FCN8s)')
+    # FCN8s / DeconvNet / SegNet / Deeplab_V3_Resnet101 / deeplabv3_resnet50 / Unet_resnet50 / DeepLabV3Plus_resnet101 / DeepLabV3Plus_efficientnet
+    parser.add_argument('--model', type=str, default='Deeplab_V3_Resnet101', help='backbone bert model for training (default: FCN8s)')
+    # BasicAugmentation / ImagenetDefaultAugmentation / MyCustumAugmentation
+    parser.add_argument('--augmentation', type=str, default='ImagenetDefaultAugmentation', help='augmentation method for training')
     parser.add_argument('--valid', type=int, default=1, help='whether split training set (default: 1)')
 
     args = parser.parse_args()
