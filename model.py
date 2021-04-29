@@ -496,3 +496,17 @@ class DeepLabV3Plus_efficientnet(nn.Module):
 
     def forward(self, x):
         return self.model(x)
+
+
+class FPN_efficientnet(nn.Module):
+    def __init__(self, num_classes):
+        super(FPN_efficientnet, self).__init__()
+        self.model = smp.FPN(
+            encoder_name="efficientnet-b7",
+            encoder_weights='imagenet',
+            in_channels=3,
+            classes=num_classes
+        )
+
+    def forward(self, x):
+        return self.model(x)
