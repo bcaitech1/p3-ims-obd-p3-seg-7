@@ -141,18 +141,9 @@ def main(args):
         return tuple(zip(*batch))
 
     # set augmentation methods
-    transform_module = getattr(import_module("augmentation"), args.augmentation)  # default: BaseAugmentation
+    transform_module = getattr(import_module("augmentation"), args.augmentation)
     train_transform = transform_module()
     val_transform = transform_module()
-    # train_transform = A.Compose([
-    #                             A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-    #                             ToTensorV2(),
-    #                             ])
-
-    # val_transform = A.Compose([
-    #                         A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-    #                         ToTensorV2(),
-    #                         ])
 
     # validation set을 직접 나누고 싶은 경우
     # random_split 사용하여 data set을 8:2 로 분할
