@@ -6,6 +6,12 @@
 따라서, 우리는 쓰레기가 찍힌 사진에서 쓰레기를 Segmentation 하는 모델을 만들어 이러한 문제점을 해결해보고자 합니다. 문제 해결을 위한 데이터셋으로는 일반 쓰레기, 플라스틱, 종이, 유리 등 11 종류의 쓰레기가 찍힌 사진 데이터셋이 제공됩니다.
 
 ### 코드 설명
+* augmentation.py
+    * 학습에 사용될 augmentation들의 모흠 파일입니다. 
+
+* check_augmentation.ipynb
+    * custom augmentation을 확인하기 위한 쥬피터 노트북 파일입니다.
+
 * inference.py
     * 메인 infernece 파일입니다.
 
