@@ -19,4 +19,4 @@ home
 
 |4/27|4/28||
 |---|---|---|
-|<a href="https://github.com/bcaitech1/p3-ims-obd-p3-seg-7/blob/jiyun/FCN.md">FCN</a>|FCN의 한계 극복|
+|<a href="https://github.com/bcaitech1/p3-ims-obd-p3-seg-7/blob/jiyun/FCN.md">FCN</a>|<a href="">FCN의 한계</a>|
