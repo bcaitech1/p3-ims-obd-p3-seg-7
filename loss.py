@@ -8,7 +8,7 @@ class CrossEntropyLoss(nn.Module):
         super(CrossEntropyLoss, self).__init__()
 
     def forward(self, input_tensor, target_tensor):
-        return F.corss_entropy(input_tensor, target_tensor)
+        return F.cross_entropy(input_tensor, target_tensor)
 
 
 class FocalLoss(nn.Module):
@@ -20,7 +20,7 @@ class FocalLoss(nn.Module):
         self.reduction = reduction
 
     def forward(self, input_tensor, target_tensor):
-        log_prob = F.log_softmax(input_tensor, dim=-1)
+        log_prob = F.log_softmax(input_tensor, dim=1)
         prob = torch.exp(log_prob)
         return F.nll_loss(
             ((1 - prob) ** self.gamma) * log_prob,
@@ -31,7 +31,7 @@ class FocalLoss(nn.Module):
 
 
 class LabelSmoothingLoss(nn.Module):
-    def __init__(self, classes=21, smoothing=0.0, dim=-1):
+    def __init__(self, classes=21, smoothing=0.2, dim=1):
         super(LabelSmoothingLoss, self).__init__()
         self.confidence = 1.0 - smoothing
         self.smoothing = smoothing
@@ -70,3 +70,53 @@ class F1Loss(nn.Module):
         f1 = 2 * (precision * recall) / (precision + recall + self.epsilon)
         f1 = f1.clamp(min=self.epsilon, max=1 - self.epsilon)
         return 1 - f1.mean()
+
+
+class DiceLoss(nn.Module):
+    def __init__(self, weight=None, size_average=True, eps=1e-7):
+        super(DiceLoss, self).__init__()
+        self.eps = eps
+
+    def forward(self, inputs, targets, smooth=1):
+        """
+            Args:
+                inputs: (N, C, W, H)
+                targets: (N, W, H)
+        """ 
+        num_classes = inputs.shape[1]
+
+        true_1_hot = torch.eye(num_classes)[targets.squeeze(1)]
+        true_1_hot = true_1_hot.permute(0, 3, 1, 2).float()
+        probas = F.softmax(inputs, dim=1)
+
+        true_1_hot = true_1_hot.type(inputs.type())
+        dims = (0,) + tuple(range(2, targets.ndimension()))
+        intersection = torch.sum(probas * true_1_hot, dims)
+        cardinality = torch.sum(probas + true_1_hot, dims)
+        dice_loss = (2. * intersection / (cardinality + self.eps)).mean()
+
+        return (1 - dice_loss)          # in order to maximize dice loss
+
+
+class CEandDICE(nn.Module):
+    def __init__(self, coeff=1):
+        super(CEandDICE, self).__init__()
+
+        self.CE = CrossEntropyLoss()
+        self.DICE = DiceLoss()
+        self.coeff = coeff
+
+    def forward(self, inputs, targets):
+        return self.CE(inputs, targets) + self.coeff * self.DICE(inputs, targets) 
+
+
+class CEandLabelSmoothing(nn.Module):
+    def __init__(self, coeff=1):
+        super(CEandLabelSmoothing, self).__init__()
+
+        self.CE = CrossEntropyLoss()
+        self.LabelSmoothing = LabelSmoothingLoss()
+        self.coeff = coeff
+
+    def forward(self, inputs, targets):
+        return self.CE(inputs, targets) + self.coeff * self.LabelSmoothing(inputs, targets)
