@@ -23,7 +23,8 @@ def validation(epoch, model, data_loader, criterion, device):
     with torch.no_grad():
         total_loss = 0
         cnt = 0
-        mIoU_list = []
+        # mIoU_list = []
+        hist = np.zeros((12, 12))
         for step, (images, masks, _) in enumerate(data_loader):
             
             images = torch.stack(images)       # (batch, channel, height, width)
@@ -38,13 +39,18 @@ def validation(epoch, model, data_loader, criterion, device):
             
             outputs = torch.argmax(outputs.squeeze(), dim=1).detach().cpu().numpy()
 
-            mIoU = label_accuracy_score(masks.detach().cpu().numpy(), outputs, n_class=12)[2]
-            mIoU_list.append(mIoU)
+            hist = add_hist(hist, masks.detach().cpu().numpy(), outputs, n_class=12)
+
+            # mIoU = label_accuracy_score(masks.detach().cpu().numpy(), outputs, n_class=12)[2]
+            # mIoU_list.append(mIoU)
+
+        acc, acc_cls, mIoU, fwavacc = label_accuracy_score(hist)
             
         avrg_loss = total_loss / cnt
-        print('Validation #{}  Average Loss: {:.4f}, mIoU: {:.4f}'.format(epoch, avrg_loss, np.mean(mIoU_list)))
+        # print('Validation #{}  Average Loss: {:.4f}, mIoU: {:.4f}'.format(epoch, avrg_loss, np.mean(mIoU_list)))
+        print('Validation #{}  Average Loss: {:.4f}, mIoU: {:.4f}, acc: {:.4f}'.format(epoch, avrg_loss, mIoU, acc))
 
-    return avrg_loss, np.mean(mIoU_list)
+    return avrg_loss, mIoU
 
 
 def train(num_epochs, model, data_loader, val_loader, criterion, optimizer, saved_dir, val_every, device, model_name):
@@ -54,6 +60,8 @@ def train(num_epochs, model, data_loader, val_loader, criterion, optimizer, save
         torch.save(model.state_dict(), output_path)
     # start training
     print('Start training..')
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'max')
+    # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=2, eta_min=0)
     best_loss = 9999999
     best_mIoU = 0
     for epoch in range(num_epochs):
@@ -74,6 +82,7 @@ def train(num_epochs, model, data_loader, val_loader, criterion, optimizer, save
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+            # scheduler.step()
             
             # step 주기에 따른 loss 출력
             if (step + 1) % 25 == 0:
@@ -85,6 +94,7 @@ def train(num_epochs, model, data_loader, val_loader, criterion, optimizer, save
         # validation 주기에 따른 loss 출력 및 best model 저장
         if (epoch + 1) % val_every == 0:
             avrg_loss, mIoU = validation(epoch + 1, model, val_loader, criterion, device)
+            scheduler.step(mIoU)
             if avrg_loss < best_loss:
                 print('Best loss performance at epoch: {}'.format(epoch + 1))
                 print('Save model in', saved_dir)
@@ -183,7 +193,8 @@ def main(args):
 
     # define optimizer  & criterion
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
-    criterion = torch.nn.CrossEntropyLoss()
+    criterion_module = getattr(import_module("loss"), args.loss)
+    criterion = criterion_module()
 
     # train model
     val_every = 1
@@ -215,9 +226,11 @@ if __name__ == '__main__':
     parser.add_argument('--model_dir', type=str, default='./results', help='directory where model would be saved (default: ./results)')
 
     # FCN8s / DeconvNet / SegNet / Deeplab_V3_Resnet101 / deeplabv3_resnet50 / Unet_resnet50 / DeepLabV3Plus_resnet101 / DeepLabV3Plus_efficientnet
-    parser.add_argument('--model', type=str, default='Deeplab_V3_Resnet101', help='backbone bert model for training (default: FCN8s)')
-    # BasicAugmentation / ImagenetDefaultAugmentation / MyCustumAugmentation
+    parser.add_argument('--model', type=str, default='DeepLabV3Plus_resnet101', help='backbone bert model for training (default: FCN8s)')
+    # BasicAugmentation / ImagenetDefaultAugmentation / CustomAugmentation / CustomElasticAugmentation
     parser.add_argument('--augmentation', type=str, default='ImagenetDefaultAugmentation', help='augmentation method for training')
+    # CrossEntropyLoss/ FocalLoss
+    parser.add_argument('--loss', type=str, default='CrossEntropyLoss', help='loss function to train the model')
     parser.add_argument('--valid', type=int, default=1, help='whether split training set (default: 1)')
 
     args = parser.parse_args()
