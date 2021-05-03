@@ -510,3 +510,45 @@ class FPN_efficientnet(nn.Module):
 
     def forward(self, x):
         return self.model(x)
+
+
+class DeepLabV3Plus_resnext101_32x8d(nn.Module):
+    def __init__(self, num_classes):
+        super(DeepLabV3Plus_resnext101_32x8d, self).__init__()
+        self.model = smp.DeepLabV3Plus(
+            encoder_name="resnext101_32x8d",        # choose encoder, e.g. mobilenet_v2 or efficientnet-b7
+            encoder_weights="imagenet",     # use `imagenet` pre-trained weights for encoder initialization
+            in_channels=3,                  # model input channels (1 for gray-scale images, 3 for RGB, etc.)
+            classes=num_classes,                      # model output channels (number of classes in your dataset)
+        )
+
+    def forward(self, x):
+        return self.model(x)
+
+
+class DeepLabV3Plus_dpn92(nn.Module):
+    def __init__(self, num_classes):
+        super(DeepLabV3Plus_dpn92, self).__init__()
+        self.model = smp.DeepLabV3Plus(
+            encoder_name="dpn92",        # choose encoder, e.g. mobilenet_v2 or efficientnet-b7
+            encoder_weights="imagenet+5k",     # use `imagenet` pre-trained weights for encoder initialization
+            in_channels=3,                  # model input channels (1 for gray-scale images, 3 for RGB, etc.)
+            classes=num_classes,                      # model output channels (number of classes in your dataset)
+        )
+
+    def forward(self, x):
+        return self.model(x)
+
+
+class DeepLabV3Plus_dpn107(nn.Module):
+    def __init__(self, num_classes):
+        super(DeepLabV3Plus_dpn107, self).__init__()
+        self.model = smp.DeepLabV3Plus(
+            encoder_name="dpn107",        # choose encoder, e.g. mobilenet_v2 or efficientnet-b7
+            encoder_weights="imagenet+5k",     # use `imagenet` pre-trained weights for encoder initialization
+            in_channels=3,                  # model input channels (1 for gray-scale images, 3 for RGB, etc.)
+            classes=num_classes,                      # model output channels (number of classes in your dataset)
+        )
+
+    def forward(self, x):
+        return self.model(x)
