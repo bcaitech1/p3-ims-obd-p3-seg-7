@@ -98,11 +98,11 @@ def inference(model_name, model_num, batch_size, num_workers, type):
                                     ignore_index=True)
 
     # submission.csv로 저장
-    submission.to_csv(f"./submission/{model_name}_{type}.csv", index=False)
+    submission.to_csv(f"./submission/{model_name}{model_num}_{type}.csv", index=False)
 
 
 def main(args):
-    inference(args.model, args.model_name, args.batch_size, args.num_workers, args.type)
+    inference(args.model, args.model_num, args.batch_size, args.num_workers, args.type)
 
 
 if __name__ == '__main__':
@@ -112,7 +112,7 @@ if __name__ == '__main__':
     # FCN8s / DeconvNet / SegNet / Deeplab_V3_Resnet101
     parser.add_argument('--model', type=str, default="Deeplab_V3_Resnet101")
     parser.add_argument('--model_num', type=str, default="1")
-    parser.add_argument('--augmentation', type=str, default='ImagenetDefaultAugmentation', help='augmentation method for training')
+    parser.add_argument('--augmentation', type=str, default='BasicAugmentation', help='augmentation method for training')
     parser.add_argument('--type', type=str, default='loss')
     parser.add_argument('--batch_size', type=int, default=8, help='input batch size for training (deafult: 8)')
     parser.add_argument('--num_workers', type=int, default=4, help='number of workers for dataloader (default: 4)')
